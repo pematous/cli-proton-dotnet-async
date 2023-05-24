@@ -16,8 +16,11 @@
 
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
+
 using Apache.Qpid.Proton.Client;
 using Apache.Qpid.Proton.Types;
+
 
 namespace ClientLib
 {
@@ -81,7 +84,9 @@ namespace ClientLib
             if (txBatchFlag) {
                 receiver = this.session.OpenReceiver(options.Address, receiverOptions);
             } else {
-                receiver = this.connection.OpenReceiver(options.Address, receiverOptions);
+                Task<IReceiver> task = this.connection.OpenReceiverAsync(options.Address, receiverOptions);
+                task.Wait();
+                receiver = task.Result;
             }
             return receiver;
         }
@@ -95,11 +100,11 @@ namespace ClientLib
         private void DeliveryAcknowledge(IDelivery delivery, string action)
         {
             if (action.ToLower().Equals("reject"))
-                delivery.Reject("test-condition", "test-description");
+                delivery.RejectAsync("test-condition", "test-description");
             else if (action.ToLower().Equals("release"))
-                delivery.Release();
+                delivery.ReleaseAsync();
             else if (!action.ToLower().Equals("noack"))
-                delivery.Accept();
+                delivery.AcceptAsync();
         }
         #endregion
 
@@ -122,7 +127,9 @@ namespace ClientLib
             {
                     for (int i = 0; i < options.TxSize; i++)
                     {
-                        delivery = receiver.Receive(options.Timeout);
+                        Task<IDelivery> receiving = receiver.ReceiveAsync(options.Timeout);
+                        receiving.Wait();
+                        delivery = receiving.Result;
                         if (delivery == null) {
                             break;
                         }
@@ -191,8 +198,13 @@ namespace ClientLib
             int nReceived = 0;
             IDelivery delivery;
 
-            while (((delivery = receiver.Receive(options.Timeout)) != null) && (nReceived < options.MsgCount || options.MsgCount == 0))
+            while (nReceived < options.MsgCount || options.MsgCount == 0)
             {
+                Task<IDelivery> receiving = receiver.ReceiveAsync(options.Timeout);
+                receiving.Wait();
+                delivery = receiving.Result;
+                if (delivery == null) break;
+
                 if (options.Duration > 0)
                 {
                     Utils.Sleep4Next(ts, options.MsgCount, options.Duration, nReceived + 1);
@@ -200,8 +212,8 @@ namespace ClientLib
 
                 IMessage<object> message = delivery.Message();
 
-		if (!String.IsNullOrEmpty(options.Action))
-		    DeliveryAcknowledge(delivery, options.Action);
+                if (!String.IsNullOrEmpty(options.Action))
+                    DeliveryAcknowledge(delivery, options.Action);
 
                 Formatter.LogMessage(message, options);
                 nReceived++;
@@ -209,8 +221,8 @@ namespace ClientLib
                 if (options.ProcessReplyTo)
                 {
                     ISender sender = this.connection.OpenSender(message.ReplyTo);
-                    sender.Send(message);
-                    sender.Close();
+                    sender.SendAsync(message);
+                    sender.CloseAsync();
                 }
 
                 if ((options.MsgCount > 0) && (nReceived == options.MsgCount))
@@ -265,7 +277,7 @@ namespace ClientLib
                     int nReceived = 0;
 
                     if (options.Capacity > -1)
-                        receiver.AddCredit(Convert.ToUInt32(options.Capacity));
+                        receiver.AddCreditAsync(Convert.ToUInt32(options.Capacity));
 
 		    //receiving of messages
                     if (txBatchFlag)

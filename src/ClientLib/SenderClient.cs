@@ -18,6 +18,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Transactions;
+using System.Threading.Tasks;
 
 using Apache.Qpid.Proton.Client;
 using Apache.Qpid.Proton.Types.Messaging;
@@ -160,7 +161,9 @@ namespace ClientLib
             if (txBatchFlag) {
                 sender = this.session.OpenSender(options.Address, SenderOptions);
             } else {
-                sender = this.connection.OpenSender(options.Address, SenderOptions);
+                Task<ISender> task = this.connection.OpenSenderAsync(options.Address, SenderOptions);
+                task.Wait();
+                sender = task.Result;
             }
             return sender;
         }
@@ -191,7 +194,7 @@ namespace ClientLib
                         if ((options.Duration > 0) && (options.DurationMode == "before-send"))
                             Utils.Sleep4Next(this.ts, options.MsgCount, (options.Duration), nSent + 1);
 
-                        sender.Send(message);
+                        sender.SendAsync(message);
 
                         if ((options.Duration > 0) && (options.DurationMode == "after-send-before-tx-action"))
                             Utils.Sleep4Next(this.ts, options.MsgCount, (options.Duration), nSent + 1);
@@ -227,7 +230,7 @@ namespace ClientLib
                 while (nSent < options.MsgCount)
                 {
                     message = CreateMessage(options, nSent);
-                    sender.Send(message);
+                    sender.SendAsync(message);
                     Formatter.LogMessage(message, options);
                     nSent++;
                 }
@@ -258,7 +261,9 @@ namespace ClientLib
                 if ((options.Duration > 0) && (options.DurationMode == "before-send"))
                     Utils.Sleep4Next(ts, options.MsgCount, (options.Duration), nSent + 1);
 
-                ITracker tracker = sender.Send(message);
+                Task<ITracker> sending = sender.SendAsync(message);
+                sending.Wait();
+                ITracker tracker = sending.Result;
                 tracker.AwaitSettlement();
 
                 if ((options.Duration > 0) && ((options.DurationMode == "after-send-before-tx-action") ||

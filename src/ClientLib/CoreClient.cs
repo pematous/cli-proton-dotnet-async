@@ -17,6 +17,7 @@
 using System;
 using System.Collections.Generic;
 using System.Net.Security;
+using System.Threading.Tasks;
 
 using Apache.Qpid.Proton.Client;
 
@@ -166,7 +167,9 @@ namespace ClientLib
         /// </summary>
         protected void CreateSession()
         {
-            this.session = this.connection.OpenSession();
+            Task<ISession> task = this.connection.OpenSessionAsync();
+            task.Wait();
+            this.session = task.Result;
         }
 
         /// <summary>
@@ -175,7 +178,7 @@ namespace ClientLib
         private void CloseSession()
         {
             if (this.session != null)
-                this.session.Close();
+                this.session.CloseAsync();
         }
 
         /// <summary>
@@ -185,7 +188,7 @@ namespace ClientLib
         protected void CloseLink(ILink link)
         {
             if (link != null)
-                link.Close();
+                link.Detach();
         }
 
         /// <summary>
@@ -195,7 +198,7 @@ namespace ClientLib
         {
             if (this.connection != null)
             {
-                this.connection.Close();
+                this.connection.CloseAsync();
             }
         }
 
@@ -208,7 +211,7 @@ namespace ClientLib
             {
                 this.CloseSession();
                 this.CloseConnection();
-                this.client.Close();
+                this.client.CloseAsync();
             }
         }
         #endregion
